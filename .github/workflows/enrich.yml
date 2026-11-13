@@ -62,8 +62,9 @@ jobs:
                   r["director"] = ", ".join(directors)
               if not (r.get("country") or "").strip():
                   r["country"] = ", ".join(c["name"] for c in data.get("production_countries", []))
-              if not (r.get("genre") or "").strip():
-                  r["genre"] = ", ".join(g["name"] for g in data.get("genres", []))
+              tmdb_genres = [g["name"] for g in data.get("genres", [])]
+              if tmdb_genres:
+                  r["genre"] = ", ".join(tmdb_genres)
 
               r["runtime"] = data.get("runtime") or ""
               r["overview"] = data.get("overview") or ""
