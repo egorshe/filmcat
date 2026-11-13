@@ -1,29 +1,58 @@
-name: Enrich movies.csv
+name: Catalog Manager
 
 on:
   push:
     paths:
       - 'movies.csv'
+  workflow_dispatch:
+    inputs:
+      drive:
+        description: 'Location (e.g. Drive 1)'
+        required: true
+        type: string
+      tmdb_id:
+        description: 'TMDb ID or URL'
+        required: true
+        type: string
+      kinopoisk_id:
+        description: 'Kinopoisk ID or URL (optional)'
+        required: false
+        type: string
+  schedule:
+    - cron: '0 3 1 * *' # 1st of every month at 03:00 UTC
 
 permissions:
   contents: write
 
+concurrency:
+  group: catalog-csv
+  cancel-in-progress: false
+
 jobs:
-  enrich:
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+  sync:
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch TMDb & Letterboxd metadata
+      - name: Update movies.csv
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          EVENT_NAME: ${{ github.event_name }}
+          NEW_DRIVE: ${{ github.event.inputs.drive }}
+          NEW_TMDB: ${{ github.event.inputs.tmdb_id }}
+          NEW_KP: ${{ github.event.inputs.kinopoisk_id }}
+          PYTHONUNBUFFERED: "1"
         run: |
           python3 - <<'EOF'
           import csv, json, os, re, time, urllib.request, urllib.error
 
           api_key = os.environ.get("TMDB_API_KEY", "").strip()
           assert api_key, "Missing TMDB_API_KEY repository secret."
+
+          def extract_id(val: str) -> str:
+              m = re.search(r"/(?:movie|film|tmdb)/(\d+)", val)
+              return m.group(1) if m else val.strip()
 
           def parse_lbxd_rating(html: str) -> str:
               for pat in (r'"ratingValue"\s*:\s*([\d.]+)', r'twitter:data2"[^>]*content="([\d.]+)\s*out of\s*5'):
@@ -32,77 +61,123 @@ jobs:
                       return f"{float(m.group(1)):.2f}"
               return ""
 
+          assert extract_id("https://www.themoviedb.org/movie/27205-inception") == "27205"
           assert parse_lbxd_rating('{"ratingValue":3.981}') == "3.98"
 
+          lbxd_blocked = False
+          lbxd_misses = 0
+
           def fetch_lbxd_rating(tid: str) -> str:
-              url = f"https://letterboxd.com/tmdb/{tid}/"
-              req = urllib.request.Request(url, headers={
+              global lbxd_blocked, lbxd_misses
+              if lbxd_blocked:
+                  return ""
+              req = urllib.request.Request(f"https://letterboxd.com/tmdb/{tid}/", headers={
                   "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                   "Accept-Language": "en-US,en;q=0.9",
               })
               try:
-                  with urllib.request.urlopen(req, timeout=10) as resp:
-                      return parse_lbxd_rating(resp.read().decode("utf-8", errors="ignore"))
-              except Exception as e:
-                  print(f"Letterboxd skip (tmdb_id={tid}): {e}")
+                  with urllib.request.urlopen(req, timeout=5) as resp:
+                      rating = parse_lbxd_rating(resp.read().decode("utf-8", errors="ignore"))
+                      lbxd_misses = 0 if rating else lbxd_misses + 1
+                      if lbxd_misses >= 5:
+                          print("Letterboxd returned 5 empty/challenge pages — skipping remaining rating checks.")
+                          lbxd_blocked = True
+                      return rating
+              except urllib.error.HTTPError as e:
+                  if e.code in (403, 429):
+                      print(f"Letterboxd blocked GitHub IP (HTTP {e.code}) — skipping remaining rating checks.")
+                      lbxd_blocked = True
+                  return ""
+              except Exception:
+                  lbxd_misses += 1
+                  if lbxd_misses >= 3:
+                      print("Letterboxd timing out — skipping remaining rating checks.")
+                      lbxd_blocked = True
                   return ""
 
           with open("movies.csv", newline="", encoding="utf-8-sig") as f:
               rows = list(csv.DictReader(f))
 
-          if not rows:
-              raise SystemExit(0)
-
+          assert rows, "movies.csv is empty"
           base_cols = ["drive", "title_orig", "title_en", "year", "director", "country", "genre", "tmdb_id", "kinopoisk_id"]
           extra_cols = ["runtime", "cast", "overview", "poster_path", "lbxd_rating", "fetched_tmdb_id"]
           fields = list(rows[0].keys()) + [c for c in base_cols + extra_cols if c not in rows[0]]
 
+          event = os.environ.get("EVENT_NAME", "")
+          if event == "workflow_dispatch":
+              drive = os.environ.get("NEW_DRIVE", "").strip()
+              tid = extract_id(os.environ.get("NEW_TMDB", ""))
+              kp_raw = os.environ.get("NEW_KP", "").strip()
+              kp = extract_id(kp_raw) if kp_raw else ""
+              assert drive and tid.isdigit(), f"Invalid drive or TMDb ID: {tid!r}"
+              assert not any((r.get("tmdb_id") or "").strip() == tid for r in rows), f"tmdb_id={tid} already exists"
+
+              new_row = {k: "" for k in fields}
+              new_row["drive"] = drive
+              new_row["tmdb_id"] = tid
+              new_row["kinopoisk_id"] = kp
+              rows.append(new_row)
+              print(f"Queued new film: tmdb_id={tid} on {drive}")
+
           updated = 0
           for i, r in enumerate(rows):
               tid = (r.get("tmdb_id") or "").strip()
-              if not tid or (r.get("fetched_tmdb_id") or "").strip() == tid:
+              if not tid:
                   continue
 
-              url = f"https://api.themoviedb.org/3/movie/{tid}?api_key={api_key}&append_to_response=credits"
-              try:
-                  with urllib.request.urlopen(url, timeout=10) as resp:
-                      data = json.loads(resp.read())
-              except urllib.error.HTTPError as e:
-                  print(f"Row {i+2} (tmdb_id={tid}): HTTP {e.code}")
+              needs_full = (r.get("fetched_tmdb_id") or "").strip() != tid
+              needs_rating_only = (event == "schedule") and not needs_full
+
+              if not needs_full and not needs_rating_only:
                   continue
 
-              credits = data.get("credits", {})
-              directors = [c["name"] for c in credits.get("crew", []) if c.get("job") == "Director"]
-              tmdb_genres = [g["name"] for g in data.get("genres", [])]
+              if needs_full:
+                  url = f"https://api.themoviedb.org/3/movie/{tid}?api_key={api_key}&append_to_response=credits"
+                  try:
+                      with urllib.request.urlopen(url, timeout=10) as resp:
+                          data = json.loads(resp.read())
+                  except urllib.error.HTTPError as e:
+                      print(f"Row {i+2} (tmdb_id={tid}): HTTP {e.code}")
+                      continue
 
-              if not (r.get("title_orig") or "").strip():
-                  r["title_orig"] = data.get("original_title") or data.get("title") or ""
-              if not (r.get("title_en") or "").strip():
-                  r["title_en"] = data.get("title") or ""
-              if not (r.get("year") or "").strip():
-                  r["year"] = (data.get("release_date") or "")[:4]
-              if not (r.get("director") or "").strip():
-                  r["director"] = ", ".join(directors)
-              if not (r.get("country") or "").strip():
-                  r["country"] = ", ".join(c["name"] for c in data.get("production_countries", []))
-              if tmdb_genres:
-                  r["genre"] = ", ".join(tmdb_genres)
+                  credits = data.get("credits", {})
+                  directors = [c["name"] for c in credits.get("crew", []) if c.get("job") == "Director"]
+                  tmdb_genres = [g["name"] for g in data.get("genres", [])]
 
-              r["runtime"] = data.get("runtime") or ""
-              r["overview"] = data.get("overview") or ""
-              r["poster_path"] = data.get("poster_path") or ""
-              r["cast"] = ", ".join(c["name"] for c in credits.get("cast", [])[:4])
-              r["lbxd_rating"] = fetch_lbxd_rating(tid)
-              r["fetched_tmdb_id"] = tid
+                  if not (r.get("title_orig") or "").strip():
+                      r["title_orig"] = data.get("original_title") or data.get("title") or ""
+                  if not (r.get("title_en") or "").strip():
+                      r["title_en"] = data.get("title") or ""
+                  if not (r.get("year") or "").strip():
+                      r["year"] = (data.get("release_date") or "")[:4]
+                  if not (r.get("director") or "").strip():
+                      r["director"] = ", ".join(directors)
+                  if not (r.get("country") or "").strip():
+                      r["country"] = ", ".join(c["name"] for c in data.get("production_countries", []))
+                  if tmdb_genres:
+                      r["genre"] = ", ".join(tmdb_genres)
+
+                  r["runtime"] = data.get("runtime") or ""
+                  r["overview"] = data.get("overview") or ""
+                  r["poster_path"] = data.get("poster_path") or ""
+                  r["cast"] = ", ".join(c["name"] for c in credits.get("cast", [])[:4])
+                  r["fetched_tmdb_id"] = tid
+
+              rating = fetch_lbxd_rating(tid)
+              if rating:
+                  r["lbxd_rating"] = rating
+
               updated += 1
-              time.sleep(0.4)
+              if updated % 25 == 0:
+                  print(f"Processed {updated} films...")
+              time.sleep(0.3)
 
           if updated:
               with open("movies.csv", "w", newline="", encoding="utf-8") as f:
                   w = csv.DictWriter(f, fieldnames=fields, lineterminator="\n")
                   w.writeheader()
                   w.writerows(rows)
-          print(f"Enriched/updated {updated} film(s).")
+          print(f"Done. Updated {updated} film(s).")
           EOF
 
       - name: Commit updated CSV
@@ -111,5 +186,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add movies.csv
-          git commit -m "Enrich movies.csv [skip ci]"
+          git commit -m "Update movies.csv [skip ci]"
           git push
