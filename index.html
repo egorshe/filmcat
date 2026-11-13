@@ -191,6 +191,7 @@
                     posterUrl: buildPosterUrl(m.poster_path),
                     tmdbId: m.tmdb_id != null ? String(m.tmdb_id).trim() : '',
                     kinopoiskId: m.kinopoisk_id != null ? String(m.kinopoisk_id).trim() : '',
+                    lbxdRating: String(m.lbxd_rating ?? '').trim(),
                     _search: `${titleOrig} ${titleEn} ${director} ${m.cast ?? ''} ${year} ${countryText} ${genreText} ${drive}`.toLowerCase()
                 };
             });
@@ -238,27 +239,31 @@
         }
 
         function buildModalButtons(m) {
-            const btns = [];
-            if (m.tmdbId) {
-                btns.push(`
-                    <a href="https://letterboxd.com/tmdb/${encodeURIComponent(m.tmdbId)}/" target="_blank" rel="noopener" class="flex-1 sm:flex-none flex justify-center items-center gap-2.5 px-4 py-2.5 rounded-xl bg-elevated hover:bg-white/[0.08] border border-white/[0.08] transition text-sm font-medium text-white group">
-                        <svg class="w-5 h-3.5 shrink-0 group-hover:scale-110 transition-transform" viewBox="0 0 60 22" aria-hidden="true">
-                            <circle cx="11" cy="11" r="9.5" fill="#ff8000"/>
-                            <circle cx="30" cy="11" r="9.5" fill="#00e054"/>
-                            <circle cx="49" cy="11" r="9.5" fill="#40bcf4"/>
-                        </svg>
-                        Letterboxd
-                    </a>`);
-            }
-            if (m.kinopoiskId) {
-                btns.push(`
-                    <a href="https://www.kinopoisk.ru/film/${encodeURIComponent(m.kinopoiskId)}/" target="_blank" rel="noopener" class="flex-1 sm:flex-none flex justify-center items-center gap-2 px-4 py-2.5 rounded-xl bg-elevated hover:bg-white/[0.08] border border-white/[0.08] transition text-sm font-medium text-white group">
-                        <span class="text-brandKP icon-kp text-base leading-none group-hover:scale-110 transition-transform">K</span>
-                        Kinopoisk
-                    </a>`);
-            }
-            return btns.length ? `<div class="mt-5 pt-4 border-t border-white/[0.08] flex gap-2.5">${btns.join('')}</div>` : '';
-        }
+    const btns = [];
+    if (m.tmdbId) {
+        const badge = m.lbxdRating
+            ? `<span class="ml-1 px-1.5 py-0.5 rounded bg-white/10 text-xs font-mono font-semibold text-white">★ ${esc(m.lbxdRating)}</span>`
+            : '';
+        btns.push(`
+            <a href="https://letterboxd.com/tmdb/${encodeURIComponent(m.tmdbId)}/" target="_blank" rel="noopener" class="flex-1 sm:flex-none flex justify-center items-center gap-2.5 px-4 py-2.5 rounded-xl bg-elevated hover:bg-white/[0.08] border border-white/[0.08] transition text-sm font-medium text-white group">
+                <svg class="w-5 h-3.5 shrink-0 group-hover:scale-110 transition-transform" viewBox="0 0 60 22" aria-hidden="true">
+                    <circle cx="11" cy="11" r="9.5" fill="#ff8000"/>
+                    <circle cx="30" cy="11" r="9.5" fill="#00e054"/>
+                    <circle cx="49" cy="11" r="9.5" fill="#40bcf4"/>
+                </svg>
+                <span>Letterboxd</span>
+                ${badge}
+            </a>`);
+    }
+    if (m.kinopoiskId) {
+        btns.push(`
+            <a href="https://www.kinopoisk.ru/film/${encodeURIComponent(m.kinopoiskId)}/" target="_blank" rel="noopener" class="flex-1 sm:flex-none flex justify-center items-center gap-2 px-4 py-2.5 rounded-xl bg-elevated hover:bg-white/[0.08] border border-white/[0.08] transition text-sm font-medium text-white group">
+                <span class="text-brandKP icon-kp text-base leading-none group-hover:scale-110 transition-transform">K</span>
+                <span>Kinopoisk</span>
+            </a>`);
+    }
+    return btns.length ? `<div class="mt-5 pt-4 border-t border-white/[0.08] flex gap-2.5">${btns.join('')}</div>` : '';
+}
 
         function renderRowHtml(m, resultIdx) {
             const subTitle = m.secondaryTitle ? `<span class="block sm:inline text-zinc-400 font-normal text-xs sm:text-sm sm:ml-1.5">${esc(m.secondaryTitle)}</span>` : '';
