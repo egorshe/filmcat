@@ -15,8 +15,7 @@
                         bg: '#0b0b0d',
                         surface: '#141418',
                         elevated: '#1c1c22',
-                        brandLB: '#00e054', // Letterboxd Green
-                        brandKP: '#ff6600'  // Kinopoisk Orange
+                        brandKP: '#ff6600'
                     }
                 }
             }
@@ -31,8 +30,6 @@
             background-size: 1.1em 1.1em;
             padding-right: 1.85rem;
         }
-        /* Custom SVGs for platforms lacking standard font-icons */
-        .icon-lb { fill: currentColor; }
         .icon-kp { font-weight: 800; font-family: sans-serif; letter-spacing: -1px; }
     </style>
 </head>
@@ -43,15 +40,18 @@
         <div class="max-w-5xl mx-auto px-4 sm:px-6 pt-3 pb-2.5 space-y-2.5">
             <div class="flex items-center justify-between gap-2">
                 <div class="flex items-baseline gap-2.5 min-w-0">
-                    <h1 class="text-base sm:text-lg font-semibold tracking-tight text-white">Drive Catalog</h1>
-                    <span class="text-xs font-mono text-zinc-500 tabular-nums">
+                    <h1 class="text-base sm:text-lg font-semibold tracking-tight text-white truncate">Drive Catalog</h1>
+                    <span class="text-xs font-mono text-zinc-500 tabular-nums shrink-0">
                         <span id="visible-count" class="text-zinc-300">0</span>/<span id="total-count">0</span>
                     </span>
                 </div>
 
-                <div class="flex items-center gap-1.5">
+                <div class="flex items-center gap-1.5 shrink-0">
                     <button id="reset-btn" type="button" class="hidden text-xs font-mono px-2.5 py-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.05] transition">
                         Reset
+                    </button>
+                    <button id="random-btn" type="button" title="Pick a random film from current results" class="text-xs font-mono px-2.5 py-1.5 rounded-lg bg-surface border border-white/[0.08] text-zinc-200 hover:text-white hover:border-zinc-600 active:bg-elevated transition">
+                        Random
                     </button>
                     <button id="filter-toggle" type="button" aria-expanded="false" class="md:hidden inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-surface border border-white/[0.08] text-zinc-200 active:bg-elevated">
                         <span>Filters</span>
@@ -69,10 +69,22 @@
                 <button id="clear-search" type="button" aria-label="Clear search" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 text-sm leading-none">&times;</button>
             </div>
 
-            <div id="filter-panel" class="hidden md:grid grid-cols-3 gap-2">
-                <select id="genre-filter" class="appearance-none bg-surface border border-white/[0.08] rounded-lg px-3 py-2 text-base md:text-xs text-zinc-200 focus:border-zinc-500 focus:outline-none"><option value="">All Genres</option></select>
-                <select id="country-filter" class="appearance-none bg-surface border border-white/[0.08] rounded-lg px-3 py-2 text-base md:text-xs text-zinc-200 focus:border-zinc-500 focus:outline-none"><option value="">All Countries</option></select>
-                <select id="drive-filter" class="appearance-none bg-surface border border-white/[0.08] rounded-lg px-3 py-2 text-base md:text-xs text-zinc-200 focus:border-zinc-500 focus:outline-none"><option value="">All Drives</option></select>
+            <!-- Filter Panel -->
+            <div id="filter-panel" class="hidden md:block space-y-2">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <select id="genre-filter" class="appearance-none bg-surface border border-white/[0.08] rounded-lg px-3 py-2 text-base md:text-xs text-zinc-200 focus:border-zinc-500 focus:outline-none"><option value="">All Genres</option></select>
+                    <select id="country-filter" class="appearance-none bg-surface border border-white/[0.08] rounded-lg px-3 py-2 text-base md:text-xs text-zinc-200 focus:border-zinc-500 focus:outline-none"><option value="">All Countries</option></select>
+                    <select id="decade-filter" class="appearance-none bg-surface border border-white/[0.08] rounded-lg px-3 py-2 text-base md:text-xs text-zinc-200 focus:border-zinc-500 focus:outline-none"><option value="">All Decades</option></select>
+                    <select id="drive-filter" class="appearance-none bg-surface border border-white/[0.08] rounded-lg px-3 py-2 text-base md:text-xs text-zinc-200 focus:border-zinc-500 focus:outline-none"><option value="">All Drives</option></select>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
+                    <button id="exclude-doc-btn" type="button" aria-pressed="false" class="px-2.5 py-1 rounded-lg border border-white/[0.08] bg-surface text-zinc-400 hover:text-white transition">
+                        No Documentary
+                    </button>
+                    <button id="exclude-baltics-btn" type="button" aria-pressed="false" class="px-2.5 py-1 rounded-lg border border-white/[0.08] bg-surface text-zinc-400 hover:text-white transition">
+                        No Baltics
+                    </button>
+                </div>
             </div>
 
             <!-- Sort Bar -->
@@ -110,10 +122,13 @@
 
     <script>
         const BATCH_SIZE = 60;
+        const BALTIC_COUNTRIES = new Set(['estonia', 'latvia', 'lithuania', 'baltics']);
         let catalogData = [];
         let currentResults = [];
         let renderedCount = 0;
         let sortState = { key: null, dir: 'asc' };
+        let excludeDoc = false;
+        let excludeBaltics = false;
         let debounceTimer = null;
 
         const el = {
@@ -121,6 +136,8 @@
             filterToggle: document.getElementById('filter-toggle'), filterPanel: document.getElementById('filter-panel'),
             filterBadge: document.getElementById('active-filter-badge'), drive: document.getElementById('drive-filter'),
             country: document.getElementById('country-filter'), genre: document.getElementById('genre-filter'),
+            decade: document.getElementById('decade-filter'), excludeDocBtn: document.getElementById('exclude-doc-btn'),
+            excludeBalticsBtn: document.getElementById('exclude-baltics-btn'), randomBtn: document.getElementById('random-btn'),
             reset: document.getElementById('reset-btn'), list: document.getElementById('movie-list'),
             visibleCount: document.getElementById('visible-count'), totalCount: document.getElementById('total-count'),
             status: document.getElementById('status-message'), sentinel: document.getElementById('scroll-sentinel'),
@@ -132,6 +149,7 @@
         const ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
         const esc = v => String(v ?? '').replace(/[&<>"']/g, ch => ESC_MAP[ch]);
         const splitTags = v => String(v ?? '').split(/[,/]/).map(s => s.trim()).filter(Boolean);
+        const toDecade = yearNum => (yearNum >= 1880 ? `${Math.floor(yearNum / 10) * 10}s` : '');
 
         function formatRuntime(val) {
             const mins = parseInt(val, 10);
@@ -157,14 +175,18 @@
                 const titleOrig = String(m.title_orig ?? '').trim(); const titleEn = String(m.title_en ?? '').trim();
                 const drive = String(m.drive ?? '').trim(); const director = String(m.director ?? '').trim();
                 const year = m.year != null && m.year !== '' ? String(m.year).trim() : '';
+                const yearNum = parseInt(year, 10) || 0;
                 const countries = splitTags(m.country); const genres = splitTags(m.genre);
                 const countryText = countries.join(', '); const genreText = genres.join(', ');
 
                 return {
                     _idx: idx, primaryTitle: titleOrig || titleEn || 'Untitled',
                     secondaryTitle: titleOrig && titleEn && titleOrig !== titleEn ? titleEn : '',
-                    drive, director, year, yearNum: parseInt(year, 10) || 0,
-                    countries, genres, countryText, genreText, runtimeText: formatRuntime(m.runtime),
+                    drive, director, year, yearNum, decade: toDecade(yearNum),
+                    countries, genres, countryText, genreText,
+                    isDoc: genres.some(g => g.toLowerCase() === 'documentary'),
+                    isBaltic: countries.some(c => BALTIC_COUNTRIES.has(c.toLowerCase())),
+                    runtimeText: formatRuntime(m.runtime),
                     cast: String(m.cast ?? '').trim(), overview: String(m.overview ?? '').trim(),
                     posterUrl: buildPosterUrl(m.poster_path),
                     tmdbId: m.tmdb_id != null ? String(m.tmdb_id).trim() : '',
@@ -173,6 +195,9 @@
                 };
             });
         }
+
+        console.assert(toDecade(1994) === '1990s' && toDecade(0) === '', 'toDecade() failed');
+        console.assert(normalizeRows([{ title_en: 'Test', country: 'Latvia, France', genre: 'Documentary' }])[0].isBaltic === true, 'isBaltic failed');
 
         function parseCsvText(csvText) {
             Papa.parse(csvText, {
@@ -195,16 +220,16 @@
         }
 
         function initFilters(data) {
-            const populate = (selectEl, items, label) => {
+            const populate = (selectEl, items, label, sortFn) => {
                 selectEl.innerHTML = `<option value="">${label}</option>`;
-                [...new Set(items)].sort((a, b) => a.localeCompare(b)).forEach(v => selectEl.add(new Option(v, v)));
+                [...new Set(items)].sort(sortFn).forEach(v => selectEl.add(new Option(v, v)));
             };
-            populate(el.genre, data.flatMap(m => m.genres), 'All Genres');
-            populate(el.country, data.flatMap(m => m.countries), 'All Countries');
-            populate(el.drive, data.map(m => m.drive).filter(Boolean), 'All Drives');
+            populate(el.genre, data.flatMap(m => m.genres), 'All Genres', (a, b) => a.localeCompare(b));
+            populate(el.country, data.flatMap(m => m.countries), 'All Countries', (a, b) => a.localeCompare(b));
+            populate(el.decade, data.map(m => m.decade).filter(Boolean), 'All Decades', (a, b) => b.localeCompare(a));
+            populate(el.drive, data.map(m => m.drive).filter(Boolean), 'All Drives', (a, b) => a.localeCompare(b));
         }
 
-        // List View Text Links
         function buildListLinks(m) {
             const links = [];
             if (m.tmdbId) links.push(`<a href="https://letterboxd.com/tmdb/${encodeURIComponent(m.tmdbId)}/" target="_blank" rel="noopener" data-no-modal class="text-zinc-400 hover:text-white underline decoration-zinc-700 hover:decoration-zinc-400 transition">Letterboxd</a>`);
@@ -212,14 +237,15 @@
             return links.length ? links.join('<span class="text-zinc-700 mx-1.5">·</span>') : '';
         }
 
-        // Modal Button Links with Icons
         function buildModalButtons(m) {
             const btns = [];
             if (m.tmdbId) {
                 btns.push(`
-                    <a href="https://letterboxd.com/tmdb/${encodeURIComponent(m.tmdbId)}/" target="_blank" rel="noopener" class="flex-1 sm:flex-none flex justify-center items-center gap-2 px-4 py-2.5 rounded-xl bg-elevated hover:bg-white/[0.08] border border-white/[0.08] transition text-sm font-medium text-white group">
-                        <svg class="w-4 h-4 text-brandLB group-hover:scale-110 transition-transform icon-lb" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M31.25 78.125A15.625 15.625 0 1 1 15.625 62.5a15.625 15.625 0 0 1 15.625 15.625ZM50 62.5a15.625 15.625 0 1 0 15.625 15.625A15.625 15.625 0 0 0 50 62.5Zm34.375 0A15.625 15.625 0 1 0 100 78.125 15.625 15.625 0 0 0 84.375 62.5Z"/>
+                    <a href="https://letterboxd.com/tmdb/${encodeURIComponent(m.tmdbId)}/" target="_blank" rel="noopener" class="flex-1 sm:flex-none flex justify-center items-center gap-2.5 px-4 py-2.5 rounded-xl bg-elevated hover:bg-white/[0.08] border border-white/[0.08] transition text-sm font-medium text-white group">
+                        <svg class="w-5 h-3.5 shrink-0 group-hover:scale-110 transition-transform" viewBox="0 0 60 22" aria-hidden="true">
+                            <circle cx="11" cy="11" r="9.5" fill="#ff8000"/>
+                            <circle cx="30" cy="11" r="9.5" fill="#00e054"/>
+                            <circle cx="49" cy="11" r="9.5" fill="#40bcf4"/>
                         </svg>
                         Letterboxd
                     </a>`);
@@ -274,6 +300,13 @@
             el.status.classList.add('hidden'); renderNextBatch();
         }
 
+        function updateToggleBtn(btn, active) {
+            btn.setAttribute('aria-pressed', String(active));
+            btn.className = active
+                ? 'px-2.5 py-1 rounded-lg border border-white/30 bg-white text-black font-medium transition'
+                : 'px-2.5 py-1 rounded-lg border border-white/[0.08] bg-surface text-zinc-400 hover:text-white transition';
+        }
+
         function updateSortUI() {
             el.sortButtons.forEach(btn => {
                 const key = btn.dataset.sortKey; const arrow = btn.querySelector('.sort-arrow');
@@ -285,13 +318,23 @@
         }
 
         function applyFiltersAndSort() {
-            const q = el.search.value.trim().toLowerCase(); const d = el.drive.value; const c = el.country.value; const g = el.genre.value;
+            const q = el.search.value.trim().toLowerCase();
+            const d = el.drive.value; const c = el.country.value; const g = el.genre.value; const dec = el.decade.value;
             el.clearSearch.classList.toggle('hidden', !q);
-            const activeFilterCount = [d, c, g].filter(Boolean).length;
+
+            const activeFilterCount = [d, c, g, dec, excludeDoc, excludeBaltics].filter(Boolean).length;
             el.filterBadge.textContent = activeFilterCount; el.filterBadge.classList.toggle('hidden', activeFilterCount === 0);
             el.reset.classList.toggle('hidden', !q && activeFilterCount === 0 && !sortState.key);
 
-            const filtered = catalogData.filter(m => (!q || m._search.includes(q)) && (!d || m.drive === d) && (!c || m.countries.includes(c)) && (!g || m.genres.includes(g)));
+            const filtered = catalogData.filter(m =>
+                (!q || m._search.includes(q)) &&
+                (!d || m.drive === d) &&
+                (!c || m.countries.includes(c)) &&
+                (!g || m.genres.includes(g)) &&
+                (!dec || m.decade === dec) &&
+                (!excludeDoc || !m.isDoc) &&
+                (!excludeBaltics || !m.isBaltic)
+            );
 
             if (sortState.key) {
                 filtered.sort((a, b) => {
@@ -343,9 +386,24 @@
         el.search.addEventListener('input', () => { clearTimeout(debounceTimer); debounceTimer = setTimeout(applyFiltersAndSort, 100); });
         el.clearSearch.addEventListener('click', () => { el.search.value = ''; applyFiltersAndSort(); el.search.focus(); });
         el.filterToggle.addEventListener('click', () => { const isHidden = el.filterPanel.classList.toggle('hidden'); el.filterToggle.setAttribute('aria-expanded', String(!isHidden)); });
-        [el.drive, el.country, el.genre].forEach(ctrl => ctrl.addEventListener('change', applyFiltersAndSort));
+        [el.drive, el.country, el.genre, el.decade].forEach(ctrl => ctrl.addEventListener('change', applyFiltersAndSort));
+
+        el.excludeDocBtn.addEventListener('click', () => { excludeDoc = !excludeDoc; updateToggleBtn(el.excludeDocBtn, excludeDoc); applyFiltersAndSort(); });
+        el.excludeBalticsBtn.addEventListener('click', () => { excludeBaltics = !excludeBaltics; updateToggleBtn(el.excludeBalticsBtn, excludeBaltics); applyFiltersAndSort(); });
+
+        el.randomBtn.addEventListener('click', () => {
+            if (!currentResults.length) { showToast('No matching films'); return; }
+            openDetailModal(currentResults[Math.floor(Math.random() * currentResults.length)]);
+        });
+
         el.sortButtons.forEach(btn => { btn.addEventListener('click', () => { const key = btn.dataset.sortKey; if (sortState.key === key) { sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc'; } else { sortState = { key, dir: key === 'year' ? 'desc' : 'asc' }; } applyFiltersAndSort(); }); });
-        el.reset.addEventListener('click', () => { el.search.value = ''; el.drive.value = ''; el.country.value = ''; el.genre.value = ''; sortState = { key: null, dir: 'asc' }; applyFiltersAndSort(); });
+
+        el.reset.addEventListener('click', () => {
+            el.search.value = ''; el.drive.value = ''; el.country.value = ''; el.genre.value = ''; el.decade.value = '';
+            excludeDoc = false; excludeBaltics = false;
+            updateToggleBtn(el.excludeDocBtn, false); updateToggleBtn(el.excludeBalticsBtn, false);
+            sortState = { key: null, dir: 'asc' }; applyFiltersAndSort();
+        });
 
         document.addEventListener('click', e => {
             if (e.target.id === 'close-modal-btn' || e.target === el.modal) { closeDetailModal(); return; }
