@@ -15,15 +15,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch TMDb metadata
+      - name: Fetch TMDb & Letterboxd metadata
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
         run: |
           python3 - <<'EOF'
-          import csv, json, os, time, urllib.request, urllib.error
+          import csv, json, os, re, time, urllib.request, urllib.error
 
           api_key = os.environ.get("TMDB_API_KEY", "").strip()
           assert api_key, "Missing TMDB_API_KEY repository secret."
+
+          def parse_lbxd_rating(html: str) -> str:
+              for pat in (r'"ratingValue"\s*:\s*([\d.]+)', r'twitter:data2"[^>]*content="([\d.]+)\s*out of\s*5'):
+                  m = re.search(pat, html)
+                  if m:
+                      return f"{float(m.group(1)):.2f}"
+              return ""
+
+          assert parse_lbxd_rating('{"ratingValue":3.981}') == "3.98"
+
+          def fetch_lbxd_rating(tid: str) -> str:
+              url = f"https://letterboxd.com/tmdb/{tid}/"
+              req = urllib.request.Request(url, headers={
+                  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                  "Accept-Language": "en-US,en;q=0.9",
+              })
+              try:
+                  with urllib.request.urlopen(req, timeout=10) as resp:
+                      return parse_lbxd_rating(resp.read().decode("utf-8", errors="ignore"))
+              except Exception as e:
+                  print(f"Letterboxd skip (tmdb_id={tid}): {e}")
+                  return ""
 
           with open("movies.csv", newline="", encoding="utf-8-sig") as f:
               rows = list(csv.DictReader(f))
@@ -32,7 +54,7 @@ jobs:
               raise SystemExit(0)
 
           base_cols = ["drive", "title_orig", "title_en", "year", "director", "country", "genre", "tmdb_id", "kinopoisk_id"]
-          extra_cols = ["runtime", "cast", "overview", "poster_path", "fetched_tmdb_id"]
+          extra_cols = ["runtime", "cast", "overview", "poster_path", "lbxd_rating", "fetched_tmdb_id"]
           fields = list(rows[0].keys()) + [c for c in base_cols + extra_cols if c not in rows[0]]
 
           updated = 0
@@ -51,6 +73,7 @@ jobs:
 
               credits = data.get("credits", {})
               directors = [c["name"] for c in credits.get("crew", []) if c.get("job") == "Director"]
+              tmdb_genres = [g["name"] for g in data.get("genres", [])]
 
               if not (r.get("title_orig") or "").strip():
                   r["title_orig"] = data.get("original_title") or data.get("title") or ""
@@ -62,7 +85,6 @@ jobs:
                   r["director"] = ", ".join(directors)
               if not (r.get("country") or "").strip():
                   r["country"] = ", ".join(c["name"] for c in data.get("production_countries", []))
-              tmdb_genres = [g["name"] for g in data.get("genres", [])]
               if tmdb_genres:
                   r["genre"] = ", ".join(tmdb_genres)
 
@@ -70,9 +92,10 @@ jobs:
               r["overview"] = data.get("overview") or ""
               r["poster_path"] = data.get("poster_path") or ""
               r["cast"] = ", ".join(c["name"] for c in credits.get("cast", [])[:4])
+              r["lbxd_rating"] = fetch_lbxd_rating(tid)
               r["fetched_tmdb_id"] = tid
               updated += 1
-              time.sleep(0.05)
+              time.sleep(0.4)
 
           if updated:
               with open("movies.csv", "w", newline="", encoding="utf-8") as f:
