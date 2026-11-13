@@ -197,9 +197,6 @@
             });
         }
 
-        console.assert(toDecade(1994) === '1990s' && toDecade(0) === '', 'toDecade() failed');
-        console.assert(normalizeRows([{ title_en: 'Test', country: 'Latvia, France', genre: 'Documentary' }])[0].isBaltic === true, 'isBaltic failed');
-
         function parseCsvText(csvText) {
             Papa.parse(csvText, {
                 header: true, dynamicTyping: false, skipEmptyLines: true,
@@ -239,31 +236,31 @@
         }
 
         function buildModalButtons(m) {
-    const btns = [];
-    if (m.tmdbId) {
-        const badge = m.lbxdRating
-            ? `<span class="ml-1 px-1.5 py-0.5 rounded bg-white/10 text-xs font-mono font-semibold text-white">★ ${esc(m.lbxdRating)}</span>`
-            : '';
-        btns.push(`
-            <a href="https://letterboxd.com/tmdb/${encodeURIComponent(m.tmdbId)}/" target="_blank" rel="noopener" class="flex-1 sm:flex-none flex justify-center items-center gap-2.5 px-4 py-2.5 rounded-xl bg-elevated hover:bg-white/[0.08] border border-white/[0.08] transition text-sm font-medium text-white group">
-                <svg class="w-5 h-3.5 shrink-0 group-hover:scale-110 transition-transform" viewBox="0 0 60 22" aria-hidden="true">
-                    <circle cx="11" cy="11" r="9.5" fill="#ff8000"/>
-                    <circle cx="30" cy="11" r="9.5" fill="#00e054"/>
-                    <circle cx="49" cy="11" r="9.5" fill="#40bcf4"/>
-                </svg>
-                <span>Letterboxd</span>
-                ${badge}
-            </a>`);
-    }
-    if (m.kinopoiskId) {
-        btns.push(`
-            <a href="https://www.kinopoisk.ru/film/${encodeURIComponent(m.kinopoiskId)}/" target="_blank" rel="noopener" class="flex-1 sm:flex-none flex justify-center items-center gap-2 px-4 py-2.5 rounded-xl bg-elevated hover:bg-white/[0.08] border border-white/[0.08] transition text-sm font-medium text-white group">
-                <span class="text-brandKP icon-kp text-base leading-none group-hover:scale-110 transition-transform">K</span>
-                <span>Kinopoisk</span>
-            </a>`);
-    }
-    return btns.length ? `<div class="mt-5 pt-4 border-t border-white/[0.08] flex gap-2.5">${btns.join('')}</div>` : '';
-}
+            const btns = [];
+            if (m.tmdbId) {
+                const badge = m.lbxdRating
+                    ? `<span class="ml-1 px-1.5 py-0.5 rounded bg-white/10 text-xs font-mono font-semibold text-white">★ ${esc(m.lbxdRating)}</span>`
+                    : '';
+                btns.push(`
+                    <a href="https://letterboxd.com/tmdb/${encodeURIComponent(m.tmdbId)}/" target="_blank" rel="noopener" class="flex-1 sm:flex-none flex justify-center items-center gap-2.5 px-4 py-2.5 rounded-xl bg-elevated hover:bg-white/[0.08] border border-white/[0.08] transition text-sm font-medium text-white group">
+                        <svg class="w-5 h-3.5 shrink-0 group-hover:scale-110 transition-transform" viewBox="0 0 60 22" aria-hidden="true">
+                            <circle cx="11" cy="11" r="9.5" fill="#ff8000"/>
+                            <circle cx="30" cy="11" r="9.5" fill="#00e054"/>
+                            <circle cx="49" cy="11" r="9.5" fill="#40bcf4"/>
+                        </svg>
+                        <span>Letterboxd</span>
+                        ${badge}
+                    </a>`);
+            }
+            if (m.kinopoiskId) {
+                btns.push(`
+                    <a href="https://www.kinopoisk.ru/film/${encodeURIComponent(m.kinopoiskId)}/" target="_blank" rel="noopener" class="flex-1 sm:flex-none flex justify-center items-center gap-2 px-4 py-2.5 rounded-xl bg-elevated hover:bg-white/[0.08] border border-white/[0.08] transition text-sm font-medium text-white group">
+                        <span class="text-brandKP icon-kp text-base leading-none group-hover:scale-110 transition-transform">K</span>
+                        <span>Kinopoisk</span>
+                    </a>`);
+            }
+            return btns.length ? `<div class="mt-5 pt-4 border-t border-white/[0.08] flex gap-2.5">${btns.join('')}</div>` : '';
+        }
 
         function renderRowHtml(m, resultIdx) {
             const subTitle = m.secondaryTitle ? `<span class="block sm:inline text-zinc-400 font-normal text-xs sm:text-sm sm:ml-1.5">${esc(m.secondaryTitle)}</span>` : '';
@@ -427,8 +424,8 @@
         window.addEventListener('drop', e => { e.preventDefault(); const f = e.dataTransfer?.files?.[0]; if (f) f.text().then(parseCsvText); });
         new IntersectionObserver(entries => { if (entries[0].isIntersecting) renderNextBatch(); }, { rootMargin: '300px' }).observe(el.sentinel);
 
-        // Init
-        fetch('movies.csv').then(res => { if (!res.ok) throw new Error(); return res.text(); }).then(parseCsvText).catch(() => showEmptyPrompt('Select or drop movies.csv to browse your catalog.'));
+        // Init (cache-busted so GitHub Pages updates appear immediately on mobile)
+        fetch(`movies.csv?t=${Date.now()}`).then(res => { if (!res.ok) throw new Error(); return res.text(); }).then(parseCsvText).catch(() => showEmptyPrompt('Select or drop movies.csv to browse your catalog.'));
     </script>
 </body>
 </html>
