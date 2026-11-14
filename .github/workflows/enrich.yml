@@ -7,12 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       drive:
-        description: 'Location (e.g. Drive 1)'
-        required: true
+        description: 'Location (e.g. Drive 1 - optional if updating ratings)'
+        required: false
         type: string
       tmdb_id:
-        description: 'TMDb ID or URL'
-        required: true
+        description: 'TMDb ID or URL - optional if updating ratings'
+        required: false
         type: string
       kinopoisk_id:
         description: 'Kinopoisk ID or URL (optional)'
@@ -132,9 +132,11 @@ jobs:
           fields = list(rows[0].keys()) + [c for c in base_cols + extra_cols if c not in rows[0]]
 
           event = os.environ.get("EVENT_NAME", "")
-          if event == "workflow_dispatch":
+          tid_raw = os.environ.get("NEW_TMDB", "").strip()
+
+          if event == "workflow_dispatch" and tid_raw:
               drive = os.environ.get("NEW_DRIVE", "").strip()
-              tid = extract_id(os.environ.get("NEW_TMDB", ""))
+              tid = extract_id(tid_raw)
               kp_raw = os.environ.get("NEW_KP", "").strip()
               kp = extract_id(kp_raw) if kp_raw else ""
               assert drive and tid.isdigit(), f"Invalid drive or TMDb ID: {tid!r}"
@@ -146,6 +148,8 @@ jobs:
               new_row["kinopoisk_id"] = kp
               rows.append(new_row)
               print(f"Queued new film: tmdb_id={tid} on {drive}")
+          elif event == "workflow_dispatch":
+              print("Workflow triggered manually without a new film — running rating update across catalog.")
 
           updated = 0
           for i, r in enumerate(rows):
@@ -155,7 +159,7 @@ jobs:
                   continue
 
               needs_full = bool(tid) and (r.get("fetched_tmdb_id") or "").strip() != tid
-              needs_rating_only = (event == "schedule") and not needs_full
+              needs_rating_only = (event == "schedule") or (event == "workflow_dispatch" and not tid_raw)
 
               row_changed = False
 
@@ -169,7 +173,7 @@ jobs:
                       continue
 
                   credits = data.get("credits", {})
-                  directors = [c["name"] for c in credits.get("crew", []) if c.get("job") == "Director"]
+                  directors = [c["name"] for c in credits.get("crew", []) if c.get("job"] == "Director"]
                   tmdb_genres = [g["name"] for g in data.get("genres", [])]
 
                   if not (r.get("title_orig") or "").strip():
