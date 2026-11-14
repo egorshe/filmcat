@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Drive Catalog // Movie Index</title>
+    <title>Movie Library</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script>
@@ -192,6 +192,7 @@
                     tmdbId: m.tmdb_id != null ? String(m.tmdb_id).trim() : '',
                     kinopoiskId: m.kinopoisk_id != null ? String(m.kinopoisk_id).trim() : '',
                     lbxdRating: String(m.lbxd_rating ?? '').trim(),
+                    kpRating: String(m.kp_rating ?? '').trim(),
                     _search: `${titleOrig} ${titleEn} ${director} ${m.cast ?? ''} ${year} ${countryText} ${genreText} ${drive}`.toLowerCase()
                 };
             });
@@ -253,12 +254,16 @@
                     </a>`);
             }
             if (m.kinopoiskId) {
-                btns.push(`
-                    <a href="https://www.kinopoisk.ru/film/${encodeURIComponent(m.kinopoiskId)}/" target="_blank" rel="noopener" class="flex-1 sm:flex-none flex justify-center items-center gap-2 px-4 py-2.5 rounded-xl bg-elevated hover:bg-white/[0.08] border border-white/[0.08] transition text-sm font-medium text-white group">
-                        <span class="text-brandKP icon-kp text-base leading-none group-hover:scale-110 transition-transform">K</span>
-                        <span>Kinopoisk</span>
-                    </a>`);
-            }
+                            const kpBadge = m.kpRating
+                                ? `<span class="ml-1 px-2 py-0.5 rounded bg-white/10 text-xs font-mono font-semibold text-white">${esc(m.kpRating)}</span>`
+                                : '';
+                            btns.push(`
+                                <a href="https://www.kinopoisk.ru/film/${encodeURIComponent(m.kinopoiskId)}/" target="_blank" rel="noopener" class="flex-1 sm:flex-none flex justify-center items-center gap-2 px-4 py-2.5 rounded-xl bg-elevated hover:bg-white/[0.08] border border-white/[0.08] transition text-sm font-medium text-white group">
+                                    <span class="text-brandKP icon-kp text-base leading-none group-hover:scale-110 transition-transform">K</span>
+                                    <span>Kinopoisk</span>
+                                    ${kpBadge}
+                                </a>`);
+                        }
             return btns.length ? `<div class="mt-5 pt-4 border-t border-white/[0.08] flex gap-2.5">${btns.join('')}</div>` : '';
         }
 

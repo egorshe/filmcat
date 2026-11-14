@@ -38,6 +38,7 @@ jobs:
       - name: Update movies.csv
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          KP_API_KEY: ${{ secrets.KP_API_KEY }}
           EVENT_NAME: ${{ github.event_name }}
           NEW_DRIVE: ${{ github.event.inputs.drive }}
           NEW_TMDB: ${{ github.event.inputs.tmdb_id }}
@@ -48,6 +49,7 @@ jobs:
           import csv, json, os, re, time, urllib.request, urllib.error
 
           api_key = os.environ.get("TMDB_API_KEY", "").strip()
+          kp_api_key = os.environ.get("KP_API_KEY", "").strip()
           assert api_key, "Missing TMDB_API_KEY repository secret."
 
           def extract_id(val: str) -> str:
@@ -95,12 +97,38 @@ jobs:
                       lbxd_blocked = True
                   return ""
 
+          kp_blocked = not bool(kp_api_key)
+
+          def fetch_kp_rating(kid: str) -> str:
+              global kp_blocked
+              if kp_blocked or not kid.isdigit():
+                  return ""
+              req = urllib.request.Request(
+                  f"https://kinopoiskapiunofficial.tech/api/v2.2/films/{kid}",
+                  headers={
+                      "X-API-KEY": kp_api_key,
+                      "Content-Type": "application/json",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=8) as resp:
+                      data = json.loads(resp.read())
+                      val = data.get("ratingKinopoisk")
+                      return f"{float(val):.1f}" if val is not None else ""
+              except urllib.error.HTTPError as e:
+                  if e.code in (401, 402, 429):
+                      print(f"Kinopoisk API stopped (HTTP {e.code}) — skipping remaining KP checks.")
+                      kp_blocked = True
+                  return ""
+              except Exception:
+                  return ""
+
           with open("movies.csv", newline="", encoding="utf-8-sig") as f:
               rows = list(csv.DictReader(f))
 
           assert rows, "movies.csv is empty"
           base_cols = ["drive", "title_orig", "title_en", "year", "director", "country", "genre", "tmdb_id", "kinopoisk_id"]
-          extra_cols = ["runtime", "cast", "overview", "poster_path", "lbxd_rating", "fetched_tmdb_id"]
+          extra_cols = ["runtime", "cast", "overview", "poster_path", "lbxd_rating", "kp_rating", "fetched_tmdb_id"]
           fields = list(rows[0].keys()) + [c for c in base_cols + extra_cols if c not in rows[0]]
 
           event = os.environ.get("EVENT_NAME", "")
@@ -122,14 +150,14 @@ jobs:
           updated = 0
           for i, r in enumerate(rows):
               tid = (r.get("tmdb_id") or "").strip()
-              if not tid:
+              kid = (r.get("kinopoisk_id") or "").strip()
+              if not tid and not kid:
                   continue
 
-              needs_full = (r.get("fetched_tmdb_id") or "").strip() != tid
+              needs_full = bool(tid) and (r.get("fetched_tmdb_id") or "").strip() != tid
               needs_rating_only = (event == "schedule") and not needs_full
 
-              if not needs_full and not needs_rating_only:
-                  continue
+              row_changed = False
 
               if needs_full:
                   url = f"https://api.themoviedb.org/3/movie/{tid}?api_key={api_key}&append_to_response=credits"
@@ -162,15 +190,28 @@ jobs:
                   r["poster_path"] = data.get("poster_path") or ""
                   r["cast"] = ", ".join(c["name"] for c in credits.get("cast", [])[:4])
                   r["fetched_tmdb_id"] = tid
+                  row_changed = True
 
-              rating = fetch_lbxd_rating(tid)
-              if rating:
-                  r["lbxd_rating"] = rating
+              is_documentary = "documentary" in (r.get("genre") or "").lower()
+              needs_kp = bool(kid) and not is_documentary and not kp_blocked and (not (r.get("kp_rating") or "").strip() or event == "schedule")
 
-              updated += 1
-              if updated % 25 == 0:
-                  print(f"Processed {updated} films...")
-              time.sleep(0.3)
+              if tid and (needs_full or needs_rating_only):
+                  rating = fetch_lbxd_rating(tid)
+                  if rating:
+                      r["lbxd_rating"] = rating
+                      row_changed = True
+
+              if needs_kp:
+                  kp_rating = fetch_kp_rating(kid)
+                  if kp_rating:
+                      r["kp_rating"] = kp_rating
+                      row_changed = True
+
+              if row_changed:
+                  updated += 1
+                  if updated % 25 == 0:
+                      print(f"Processed {updated} films...")
+                  time.sleep(0.3)
 
           if updated:
               with open("movies.csv", "w", newline="", encoding="utf-8") as f:
