@@ -149,6 +149,14 @@
         const ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
         const esc = v => String(v ?? '').replace(/[&<>"']/g, ch => ESC_MAP[ch]);
         const splitTags = v => String(v ?? '').split(/[,/]/).map(s => s.trim()).filter(Boolean);
+        // Collapse case variants ("comedy"/"Comedy") into the most common spelling
+        function makeCanon(values) {
+            const counts = new Map();
+            values.forEach(v => { const k = v.toLowerCase(); const c = counts.get(k) ?? new Map(); c.set(v, (c.get(v) ?? 0) + 1); counts.set(k, c); });
+            const canon = new Map();
+            counts.forEach((variants, k) => canon.set(k, [...variants.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], undefined, { caseFirst: 'upper' }))[0][0]));
+            return v => canon.get(v.toLowerCase()) ?? v;
+        }
         const toDecade = yearNum => (yearNum >= 1880 ? `${Math.floor(yearNum / 10) * 10}s` : '');
 
         function formatRuntime(val) {
@@ -171,12 +179,15 @@
         }
 
         function normalizeRows(rows) {
-            return rows.filter(m => m && ((m.title_orig != null && m.title_orig !== '') || (m.title_en != null && m.title_en !== ''))).map((m, idx) => {
+            const kept = rows.filter(m => m && ((m.title_orig != null && m.title_orig !== '') || (m.title_en != null && m.title_en !== '')));
+            const canonGenre = makeCanon(kept.flatMap(m => splitTags(m.genre)));
+            const canonCountry = makeCanon(kept.flatMap(m => splitTags(m.country)));
+            return kept.map((m, idx) => {
                 const titleOrig = String(m.title_orig ?? '').trim(); const titleEn = String(m.title_en ?? '').trim();
                 const drive = String(m.drive ?? '').trim(); const director = String(m.director ?? '').trim();
                 const year = m.year != null && m.year !== '' ? String(m.year).trim() : '';
                 const yearNum = parseInt(year, 10) || 0;
-                const countries = splitTags(m.country); const genres = splitTags(m.genre);
+                const countries = [...new Set(splitTags(m.country).map(canonCountry))]; const genres = [...new Set(splitTags(m.genre).map(canonGenre))];
                 const countryText = countries.join(', '); const genreText = genres.join(', ');
 
                 return {
