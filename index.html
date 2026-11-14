@@ -110,8 +110,8 @@
     </main>
 
     <!-- Detail Sheet -->
-    <div id="detail-modal" class="hidden fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-xs p-0 sm:p-4" role="dialog" aria-modal="true">
-        <div class="w-full sm:max-w-lg max-h-[88vh] overflow-y-auto bg-surface border-t sm:border border-white/[0.1] rounded-t-2xl sm:rounded-2xl p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl">
+    <div id="detail-modal" class="hidden fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-xs p-0 sm:p-4 overscroll-contain transition-opacity duration-200" role="dialog" aria-modal="true">
+        <div id="detail-sheet" class="w-full sm:max-w-lg max-h-[88vh] overflow-y-auto overscroll-contain bg-surface border-t sm:border border-white/[0.1] rounded-t-2xl sm:rounded-2xl p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl will-change-transform">
             <div class="w-10 h-1 rounded-full bg-zinc-700 mx-auto mb-4 sm:hidden"></div>
             <div id="detail-content"></div>
         </div>
@@ -142,8 +142,8 @@
             visibleCount: document.getElementById('visible-count'), totalCount: document.getElementById('total-count'),
             status: document.getElementById('status-message'), sentinel: document.getElementById('scroll-sentinel'),
             fileInput: document.getElementById('csv-file-input'), modal: document.getElementById('detail-modal'),
-            detailContent: document.getElementById('detail-content'), toast: document.getElementById('toast'),
-            sortButtons: [...document.querySelectorAll('.sort-btn')]
+            sheet: document.getElementById('detail-sheet'), detailContent: document.getElementById('detail-content'),
+            toast: document.getElementById('toast'), sortButtons: [...document.querySelectorAll('.sort-btn')]
         };
 
         const ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -379,10 +379,80 @@
 
                 ${buildModalButtons(m)}
             `;
+            el.sheet.style.transition = '';
+            el.sheet.style.transform = '';
+            el.sheet.scrollTop = 0;
+            el.modal.style.backgroundColor = '';
             el.modal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
         }
 
-        function closeDetailModal() { el.modal.classList.add('hidden'); }
+        function closeDetailModal() {
+            el.modal.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+            el.sheet.style.transition = '';
+            el.sheet.style.transform = '';
+            el.modal.style.backgroundColor = '';
+        }
+
+        // Swipe-down to dismiss sheet
+        let dragStartY = 0;
+        let dragCurrentY = 0;
+        let dragStartTime = 0;
+        let isDraggingSheet = false;
+
+        el.sheet.addEventListener('touchstart', e => {
+            if (e.touches.length !== 1) return;
+            dragStartY = e.touches[0].clientY;
+            dragCurrentY = 0;
+            dragStartTime = Date.now();
+            isDraggingSheet = el.sheet.scrollTop <= 0;
+            if (isDraggingSheet) el.sheet.style.transition = 'none';
+        }, { passive: true });
+
+        el.sheet.addEventListener('touchmove', e => {
+            if (!isDraggingSheet) return;
+            const deltaY = e.touches[0].clientY - dragStartY;
+            if (deltaY > 0 && el.sheet.scrollTop <= 0) {
+                e.preventDefault();
+                dragCurrentY = deltaY;
+                el.sheet.style.transform = `translateY(${deltaY}px)`;
+                const fade = Math.max(0.2, 0.75 * (1 - deltaY / 380));
+                el.modal.style.backgroundColor = `rgba(0, 0, 0, ${fade})`;
+            } else if (deltaY < 0) {
+                // User scrolled down into sheet content instead of pulling down
+                isDraggingSheet = false;
+                el.sheet.style.transform = '';
+                el.modal.style.backgroundColor = '';
+            }
+        }, { passive: false });
+
+        function endSheetDrag() {
+            if (!isDraggingSheet) return;
+            isDraggingSheet = false;
+            const elapsed = Math.max(1, Date.now() - dragStartTime);
+            const velocity = dragCurrentY / elapsed;
+
+            if (dragCurrentY > 90 || (dragCurrentY > 35 && velocity > 0.45)) {
+                el.sheet.style.transition = 'transform 180ms ease-out';
+                el.sheet.style.transform = 'translateY(100%)';
+                el.modal.style.backgroundColor = 'rgba(0, 0, 0, 0)';
+                setTimeout(closeDetailModal, 180);
+            } else {
+                el.sheet.style.transition = 'transform 200ms cubic-bezier(0.2, 0.9, 0.3, 1)';
+                el.sheet.style.transform = '';
+                el.modal.style.backgroundColor = '';
+            }
+            dragCurrentY = 0;
+        }
+
+        el.sheet.addEventListener('touchend', endSheetDrag, { passive: true });
+        el.sheet.addEventListener('touchcancel', endSheetDrag, { passive: true });
+
+        // Prevent backdrop touchmove from scrolling background on iOS Safari
+        el.modal.addEventListener('touchmove', e => {
+            if (e.target === el.modal) e.preventDefault();
+        }, { passive: false });
 
         // Events
         el.search.addEventListener('input', () => { clearTimeout(debounceTimer); debounceTimer = setTimeout(applyFiltersAndSort, 100); });
