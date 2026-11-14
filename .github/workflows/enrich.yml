@@ -173,7 +173,7 @@ jobs:
                       continue
 
                   credits = data.get("credits", {})
-                  directors = [c["name"] for c in credits.get("crew", []) if c.get("job"] == "Director"]
+                  directors = [c["name"] for c in credits.get("crew", []) if c.get("job") == "Director"]
                   tmdb_genres = [g["name"] for g in data.get("genres", [])]
 
                   if not (r.get("title_orig") or "").strip():
