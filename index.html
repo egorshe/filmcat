@@ -78,11 +78,11 @@
                     <select id="drive-filter" class="appearance-none bg-surface border border-white/[0.08] rounded-lg px-3 py-2 text-base md:text-xs text-zinc-200 focus:border-zinc-500 focus:outline-none"><option value="">All Drives</option></select>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
-                    <button id="exclude-doc-btn" type="button" aria-pressed="false" class="px-2.5 py-1 rounded-lg border border-white/[0.08] bg-surface text-zinc-400 hover:text-white transition">
-                        No Documentary
+                    <button id="show-doc-btn" type="button" aria-pressed="false" class="px-2.5 py-1 rounded-lg border border-white/[0.08] bg-surface text-zinc-400 hover:text-white transition">
+                        Show Documentary
                     </button>
-                    <button id="exclude-baltics-btn" type="button" aria-pressed="false" class="px-2.5 py-1 rounded-lg border border-white/[0.08] bg-surface text-zinc-400 hover:text-white transition">
-                        No Baltics
+                    <button id="show-baltics-btn" type="button" aria-pressed="false" class="px-2.5 py-1 rounded-lg border border-white/[0.08] bg-surface text-zinc-400 hover:text-white transition">
+                        Show Baltics
                     </button>
                 </div>
             </div>
@@ -122,13 +122,14 @@
 
     <script>
         const BATCH_SIZE = 60;
+        const KP_ICON_URL = 'https://upload.wikimedia.org/wikipedia/commons/f/f1/Kinopoisk_colored_favicon.svg';
         const BALTIC_COUNTRIES = new Set(['estonia', 'latvia', 'lithuania', 'baltics']);
         let catalogData = [];
         let currentResults = [];
         let renderedCount = 0;
         let sortState = { key: null, dir: 'asc' };
-        let excludeDoc = false;
-        let excludeBaltics = false;
+        let showDoc = false;
+        let showBaltics = false;
         let debounceTimer = null;
 
         const el = {
@@ -136,8 +137,8 @@
             filterToggle: document.getElementById('filter-toggle'), filterPanel: document.getElementById('filter-panel'),
             filterBadge: document.getElementById('active-filter-badge'), drive: document.getElementById('drive-filter'),
             country: document.getElementById('country-filter'), genre: document.getElementById('genre-filter'),
-            decade: document.getElementById('decade-filter'), excludeDocBtn: document.getElementById('exclude-doc-btn'),
-            excludeBalticsBtn: document.getElementById('exclude-baltics-btn'), randomBtn: document.getElementById('random-btn'),
+            decade: document.getElementById('decade-filter'), showDocBtn: document.getElementById('show-doc-btn'),
+            showBalticsBtn: document.getElementById('show-baltics-btn'), randomBtn: document.getElementById('random-btn'),
             reset: document.getElementById('reset-btn'), list: document.getElementById('movie-list'),
             visibleCount: document.getElementById('visible-count'), totalCount: document.getElementById('total-count'),
             status: document.getElementById('status-message'), sentinel: document.getElementById('scroll-sentinel'),
@@ -248,34 +249,35 @@
         }
 
         function buildModalButtons(m) {
-    const btns = [];
-    const base = "flex-1 min-w-0 flex justify-center items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl bg-elevated hover:bg-white/[0.08] border border-white/[0.08] transition text-sm font-medium text-white group";
-    const badgeCls = "px-2 py-0.5 rounded bg-white/10 text-xs font-mono font-semibold text-white";
+            const btns = [];
+            const base = "flex-1 min-w-0 flex justify-center items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl bg-elevated hover:bg-white/[0.08] border border-white/[0.08] transition text-sm font-medium text-white group";
+            const badgeCls = "px-2 py-0.5 rounded bg-white/10 text-xs font-mono font-semibold text-white";
 
-    if (m.tmdbId) {
-        const badge = m.lbxdRating ? `<span class="${badgeCls}">${esc(m.lbxdRating)}</span>` : '';
-        btns.push(`
-            <a href="https://letterboxd.com/tmdb/${encodeURIComponent(m.tmdbId)}/" target="_blank" rel="noopener" aria-label="Letterboxd" class="${base}">
-                <svg class="w-5 h-3.5 shrink-0 group-hover:scale-110 transition-transform" viewBox="0 0 60 22" aria-hidden="true">
-                    <circle cx="11" cy="11" r="9.5" fill="#ff8000"/>
-                    <circle cx="30" cy="11" r="9.5" fill="#00e054"/>
-                    <circle cx="49" cy="11" r="9.5" fill="#40bcf4"/>
-                </svg>
-                <span class="hidden sm:inline">Letterboxd</span>
-                ${badge}
-            </a>`);
-    }
-    if (m.kinopoiskId) {
-        const kpBadge = m.kpRating ? `<span class="${badgeCls}">${esc(m.kpRating)}</span>` : '';
-        btns.push(`
-            <a href="https://www.kinopoisk.ru/film/${encodeURIComponent(m.kinopoiskId)}/" target="_blank" rel="noopener" aria-label="Kinopoisk" class="${base}">
-                <span class="shrink-0 w-5 h-5 rounded-md bg-brandKP text-white icon-kp text-xs leading-5 text-center group-hover:scale-110 transition-transform" aria-hidden="true">K</span>
-                <span class="hidden sm:inline">Kinopoisk</span>
-                ${kpBadge}
-            </a>`);
-    }
-    return btns.length ? `<div class="mt-5 pt-4 border-t border-white/[0.08] flex gap-2.5">${btns.join('')}</div>` : '';
-}
+            if (m.tmdbId) {
+                const badge = m.lbxdRating ? `<span class="${badgeCls}">${esc(m.lbxdRating)}</span>` : '';
+                btns.push(`
+                    <a href="https://letterboxd.com/tmdb/${encodeURIComponent(m.tmdbId)}/" target="_blank" rel="noopener" aria-label="Letterboxd" class="${base}">
+                        <svg class="w-5 h-3.5 shrink-0 group-hover:scale-110 transition-transform" viewBox="0 0 60 22" aria-hidden="true">
+                            <circle cx="11" cy="11" r="9.5" fill="#ff8000"/>
+                            <circle cx="30" cy="11" r="9.5" fill="#00e054"/>
+                            <circle cx="49" cy="11" r="9.5" fill="#40bcf4"/>
+                        </svg>
+                        <span class="hidden sm:inline">Letterboxd</span>
+                        ${badge}
+                    </a>`);
+            }
+            if (m.kinopoiskId) {
+                const kpBadge = m.kpRating ? `<span class="${badgeCls}">${esc(m.kpRating)}</span>` : '';
+                btns.push(`
+                    <a href="https://www.kinopoisk.ru/film/${encodeURIComponent(m.kinopoiskId)}/" target="_blank" rel="noopener" aria-label="Kinopoisk" class="${base}">
+                        <img src="${KP_ICON_URL}" alt="" aria-hidden="true" class="shrink-0 w-5 h-5 object-contain group-hover:scale-110 transition-transform" onerror="this.classList.add('hidden');this.nextElementSibling.classList.remove('hidden')">
+                        <span class="hidden shrink-0 w-5 h-5 rounded-md bg-brandKP text-white icon-kp text-xs leading-5 text-center" aria-hidden="true">K</span>
+                        <span class="hidden sm:inline">Kinopoisk</span>
+                        ${kpBadge}
+                    </a>`);
+            }
+            return btns.length ? `<div class="mt-5 pt-4 border-t border-white/[0.08] flex gap-2.5">${btns.join('')}</div>` : '';
+        }
 
         function renderRowHtml(m, resultIdx) {
             const subTitle = m.secondaryTitle ? `<span class="block sm:inline text-zinc-400 font-normal text-xs sm:text-sm sm:ml-1.5">${esc(m.secondaryTitle)}</span>` : '';
@@ -339,9 +341,14 @@
             const d = el.drive.value; const c = el.country.value; const g = el.genre.value; const dec = el.decade.value;
             el.clearSearch.classList.toggle('hidden', !q);
 
-            const activeFilterCount = [d, c, g, dec, excludeDoc, excludeBaltics].filter(Boolean).length;
+            const activeFilterCount = [d, c, g, dec, showDoc, showBaltics].filter(Boolean).length;
             el.filterBadge.textContent = activeFilterCount; el.filterBadge.classList.toggle('hidden', activeFilterCount === 0);
             el.reset.classList.toggle('hidden', !q && activeFilterCount === 0 && !sortState.key);
+
+            // Documentaries and Baltic films are hidden by default. They appear when toggled on,
+            // when explicitly picked in the Genre/Country dropdowns, or whenever a search query is active.
+            const docAllowed = showDoc || !!q || g.toLowerCase() === 'documentary';
+            const balticAllowed = showBaltics || !!q || BALTIC_COUNTRIES.has(c.toLowerCase());
 
             const filtered = catalogData.filter(m =>
                 (!q || m._search.includes(q)) &&
@@ -349,8 +356,8 @@
                 (!c || m.countries.includes(c)) &&
                 (!g || m.genres.includes(g)) &&
                 (!dec || m.decade === dec) &&
-                (!excludeDoc || !m.isDoc) &&
-                (!excludeBaltics || !m.isBaltic)
+                (docAllowed || !m.isDoc) &&
+                (balticAllowed || !m.isBaltic)
             );
 
             if (sortState.key) {
@@ -475,8 +482,8 @@
         el.filterToggle.addEventListener('click', () => { const isHidden = el.filterPanel.classList.toggle('hidden'); el.filterToggle.setAttribute('aria-expanded', String(!isHidden)); });
         [el.drive, el.country, el.genre, el.decade].forEach(ctrl => ctrl.addEventListener('change', applyFiltersAndSort));
 
-        el.excludeDocBtn.addEventListener('click', () => { excludeDoc = !excludeDoc; updateToggleBtn(el.excludeDocBtn, excludeDoc); applyFiltersAndSort(); });
-        el.excludeBalticsBtn.addEventListener('click', () => { excludeBaltics = !excludeBaltics; updateToggleBtn(el.excludeBalticsBtn, excludeBaltics); applyFiltersAndSort(); });
+        el.showDocBtn.addEventListener('click', () => { showDoc = !showDoc; updateToggleBtn(el.showDocBtn, showDoc); applyFiltersAndSort(); });
+        el.showBalticsBtn.addEventListener('click', () => { showBaltics = !showBaltics; updateToggleBtn(el.showBalticsBtn, showBaltics); applyFiltersAndSort(); });
 
         el.randomBtn.addEventListener('click', () => {
             if (!currentResults.length) { showToast('No matching films'); return; }
@@ -487,8 +494,8 @@
 
         el.reset.addEventListener('click', () => {
             el.search.value = ''; el.drive.value = ''; el.country.value = ''; el.genre.value = ''; el.decade.value = '';
-            excludeDoc = false; excludeBaltics = false;
-            updateToggleBtn(el.excludeDocBtn, false); updateToggleBtn(el.excludeBalticsBtn, false);
+            showDoc = false; showBaltics = false;
+            updateToggleBtn(el.showDocBtn, false); updateToggleBtn(el.showBalticsBtn, false);
             sortState = { key: null, dir: 'asc' }; applyFiltersAndSort();
         });
 
