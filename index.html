@@ -251,7 +251,7 @@
         function buildModalButtons(m) {
             const btns = [];
             const base = "flex-1 min-w-0 flex justify-center items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl bg-elevated hover:bg-white/[0.08] border border-white/[0.08] transition text-sm font-medium text-white group";
-            const badgeCls = "px-2 py-0.5 rounded bg-white/10 text-xs font-mono font-semibold text-white";
+            const badgeCls = "text-xs font-mono font-semibold text-white";
 
             if (m.tmdbId) {
                 const badge = m.lbxdRating ? `<span class="${badgeCls}">${esc(m.lbxdRating)}</span>` : '';
