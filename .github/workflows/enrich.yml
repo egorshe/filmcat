@@ -7,15 +7,15 @@ on:
   workflow_dispatch:
     inputs:
       drive:
-        description: 'Location (e.g. Drive 1 - optional if updating ratings)'
+        description: 'Location for all films added in this run (e.g. Drive 1 - optional if updating ratings)'
         required: false
         type: string
       tmdb_id:
-        description: 'TMDb ID or URL - optional if updating ratings'
+        description: 'TMDb IDs/URLs, comma-separated. Optional Kinopoisk ID after a space, e.g. 27205 447301, 550, 680 5121'
         required: false
         type: string
       kinopoisk_id:
-        description: 'Kinopoisk ID or URL (optional)'
+        description: 'Kinopoisk ID or URL (optional, only used when adding a single film)'
         required: false
         type: string
   schedule:
@@ -136,18 +136,40 @@ jobs:
 
           if event == "workflow_dispatch" and tid_raw:
               drive = os.environ.get("NEW_DRIVE", "").strip()
-              tid = extract_id(tid_raw)
-              kp_raw = os.environ.get("NEW_KP", "").strip()
-              kp = extract_id(kp_raw) if kp_raw else ""
-              assert drive and tid.isdigit(), f"Invalid drive or TMDb ID: {tid!r}"
-              assert not any((r.get("tmdb_id") or "").strip() == tid for r in rows), f"tmdb_id={tid} already exists"
+              assert drive, "Drive is required when adding films."
+              kp_default = os.environ.get("NEW_KP", "").strip()
 
-              new_row = {k: "" for k in fields}
-              new_row["drive"] = drive
-              new_row["tmdb_id"] = tid
-              new_row["kinopoisk_id"] = kp
-              rows.append(new_row)
-              print(f"Queued new film: tmdb_id={tid} on {drive}")
+              # Entries are separated by commas/semicolons/newlines; each is "TMDB [KINOPOISK]" (space-separated)
+              entries = [e.strip() for e in re.split(r"[,;\n]+", tid_raw) if e.strip()]
+              existing = {(r.get("tmdb_id") or "").strip() for r in rows}
+              added = 0
+
+              for entry in entries:
+                  parts = entry.split()
+                  tid = extract_id(parts[0])
+                  if len(parts) > 1:
+                      kp_raw = parts[1]
+                  else:
+                      kp_raw = kp_default if len(entries) == 1 else ""
+                  kp = extract_id(kp_raw) if kp_raw else ""
+
+                  if not tid.isdigit():
+                      print(f"Skipping invalid TMDb ID/URL: {entry!r}")
+                      continue
+                  if tid in existing:
+                      print(f"Skipping tmdb_id={tid}: already in catalog")
+                      continue
+
+                  new_row = {k: "" for k in fields}
+                  new_row["drive"] = drive
+                  new_row["tmdb_id"] = tid
+                  new_row["kinopoisk_id"] = kp
+                  rows.append(new_row)
+                  existing.add(tid)
+                  added += 1
+                  print(f"Queued new film: tmdb_id={tid} kinopoisk_id={kp or '-'} on {drive}")
+
+              assert added, "No new films to add (every entry was invalid or already in the catalog)."
           elif event == "workflow_dispatch":
               print("Workflow triggered manually without a new film — running rating update across catalog.")
 
