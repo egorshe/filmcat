@@ -248,35 +248,34 @@
         }
 
         function buildModalButtons(m) {
-            const btns = [];
-            if (m.tmdbId) {
-                const badge = m.lbxdRating
-                    ? `<span class="ml-1 px-2 py-0.5 rounded bg-white/10 text-xs font-mono font-semibold text-white">${esc(m.lbxdRating)}</span>`
-                    : '';
-                btns.push(`
-                    <a href="https://letterboxd.com/tmdb/${encodeURIComponent(m.tmdbId)}/" target="_blank" rel="noopener" class="flex-1 sm:flex-none flex justify-center items-center gap-2.5 px-4 py-2.5 rounded-xl bg-elevated hover:bg-white/[0.08] border border-white/[0.08] transition text-sm font-medium text-white group">
-                        <svg class="w-5 h-3.5 shrink-0 group-hover:scale-110 transition-transform" viewBox="0 0 60 22" aria-hidden="true">
-                            <circle cx="11" cy="11" r="9.5" fill="#ff8000"/>
-                            <circle cx="30" cy="11" r="9.5" fill="#00e054"/>
-                            <circle cx="49" cy="11" r="9.5" fill="#40bcf4"/>
-                        </svg>
-                        <span>Letterboxd</span>
-                        ${badge}
-                    </a>`);
-            }
-            if (m.kinopoiskId) {
-                            const kpBadge = m.kpRating
-                                ? `<span class="ml-1 px-2 py-0.5 rounded bg-white/10 text-xs font-mono font-semibold text-white">${esc(m.kpRating)}</span>`
-                                : '';
-                            btns.push(`
-                                <a href="https://www.kinopoisk.ru/film/${encodeURIComponent(m.kinopoiskId)}/" target="_blank" rel="noopener" class="flex-1 sm:flex-none flex justify-center items-center gap-2 px-4 py-2.5 rounded-xl bg-elevated hover:bg-white/[0.08] border border-white/[0.08] transition text-sm font-medium text-white group">
-                                    <span class="text-brandKP icon-kp text-base leading-none group-hover:scale-110 transition-transform">K</span>
-                                    <span>Kinopoisk</span>
-                                    ${kpBadge}
-                                </a>`);
-                        }
-            return btns.length ? `<div class="mt-5 pt-4 border-t border-white/[0.08] flex gap-2.5">${btns.join('')}</div>` : '';
-        }
+    const btns = [];
+    const base = "flex-1 min-w-0 flex justify-center items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl bg-elevated hover:bg-white/[0.08] border border-white/[0.08] transition text-sm font-medium text-white group";
+    const badgeCls = "px-2 py-0.5 rounded bg-white/10 text-xs font-mono font-semibold text-white";
+
+    if (m.tmdbId) {
+        const badge = m.lbxdRating ? `<span class="${badgeCls}">${esc(m.lbxdRating)}</span>` : '';
+        btns.push(`
+            <a href="https://letterboxd.com/tmdb/${encodeURIComponent(m.tmdbId)}/" target="_blank" rel="noopener" aria-label="Letterboxd" class="${base}">
+                <svg class="w-5 h-3.5 shrink-0 group-hover:scale-110 transition-transform" viewBox="0 0 60 22" aria-hidden="true">
+                    <circle cx="11" cy="11" r="9.5" fill="#ff8000"/>
+                    <circle cx="30" cy="11" r="9.5" fill="#00e054"/>
+                    <circle cx="49" cy="11" r="9.5" fill="#40bcf4"/>
+                </svg>
+                <span class="hidden sm:inline">Letterboxd</span>
+                ${badge}
+            </a>`);
+    }
+    if (m.kinopoiskId) {
+        const kpBadge = m.kpRating ? `<span class="${badgeCls}">${esc(m.kpRating)}</span>` : '';
+        btns.push(`
+            <a href="https://www.kinopoisk.ru/film/${encodeURIComponent(m.kinopoiskId)}/" target="_blank" rel="noopener" aria-label="Kinopoisk" class="${base}">
+                <span class="shrink-0 w-5 h-5 rounded-md bg-brandKP text-white icon-kp text-xs leading-5 text-center group-hover:scale-110 transition-transform" aria-hidden="true">K</span>
+                <span class="hidden sm:inline">Kinopoisk</span>
+                ${kpBadge}
+            </a>`);
+    }
+    return btns.length ? `<div class="mt-5 pt-4 border-t border-white/[0.08] flex gap-2.5">${btns.join('')}</div>` : '';
+}
 
         function renderRowHtml(m, resultIdx) {
             const subTitle = m.secondaryTitle ? `<span class="block sm:inline text-zinc-400 font-normal text-xs sm:text-sm sm:ml-1.5">${esc(m.secondaryTitle)}</span>` : '';
