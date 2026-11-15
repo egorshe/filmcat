@@ -270,7 +270,7 @@
                 const kpBadge = m.kpRating ? `<span class="${badgeCls}">${esc(m.kpRating)}</span>` : '';
                 btns.push(`
                     <a href="https://www.kinopoisk.ru/film/${encodeURIComponent(m.kinopoiskId)}/" target="_blank" rel="noopener" aria-label="Kinopoisk" class="${base}">
-                        <img src="${KP_ICON_URL}" alt="" aria-hidden="true" class="shrink-0 w-5 h-5 object-contain group-hover:scale-110 transition-transform" onerror="this.classList.add('hidden');this.nextElementSibling.classList.remove('hidden')">
+                        <img src="${KP_ICON_URL}" alt="" aria-hidden="true" class="shrink-0 w-4 h-4 object-contain group-hover:scale-110 transition-transform" onerror="this.classList.add('hidden');this.nextElementSibling.classList.remove('hidden')">
                         <span class="hidden shrink-0 w-5 h-5 rounded-md bg-brandKP text-white icon-kp text-xs leading-5 text-center" aria-hidden="true">K</span>
                         <span class="hidden sm:inline">Kinopoisk</span>
                         ${kpBadge}
